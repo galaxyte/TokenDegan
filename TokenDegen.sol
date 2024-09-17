@@ -1,91 +1,82 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 
-contract TokenDegen is ERC20, Ownable, ERC20Burnable {
+contract DegenToken is ERC20, Ownable, ERC20Burnable {
 
-    constructor() ERC20("Degen", "DGN") Ownable(msg.sender) {}
-
-    // Enum for collectible items
-    enum Collectibles {Common, Uncommon, Rare, UltraRare, Legendary}
-
-    struct Buyer {
-        address buyerAddress;
-        uint quantity;
-    }
-    // Queue for buyers wanting to purchase TokenDegen
-    Buyer[] public buyerQueue;
-
-    struct UserCollectibles {
-        uint common;
-        uint uncommon;
-        uint rare;
-        uint ultraRare;
-        uint legend;
+   struct Item {
+        string name;
+        uint8 itemId;
+        uint256 price;
     }
 
-    // Mapping to store redeemed collectibles
-    mapping(address => UserCollectibles) public userCollectibles;
+ mapping (uint8 => Item) public items;
+    mapping (address => Item[]) public playerItems; // Mapping to store player inventories
+    uint8 public tokenId;
+ event ItemPurchased(address indexed buyer, uint8 itemId, string itemName, uint256 price);
+    event GameOutcome(address indexed player, uint256 num, bool won, string result);
 
-    function purchaseTokens(address _buyerAddress, uint _quantity) public {
-        buyerQueue.push(Buyer({buyerAddress: _buyerAddress, quantity: _quantity}));
+  constructor(address initialOwner, uint tokenSupply) ERC20("Degen", "DGN") Ownable(initialOwner) {
+        mint(initialOwner, tokenSupply);
+
+  items[1] = Item("Novice Navigator", 1, 100);
+        items[2] = Item("Mythic Maverick", 2, 700);
+        items[3] = Item("Celestial Crusher", 3, 1200);
+        items[4] = Item("Astral Ace", 4, 2200);
+        items[5] = Item("Divine Dominator", 5, 2400);
+        tokenId = 6;
     }
 
-    // Mint tokens for buyers in the queue
-    function mintTokens() public onlyOwner {
-        // Loop to mint tokens for buyers in the queue
-        while (buyerQueue.length != 0) {
-            uint index = buyerQueue.length - 1;
-            if (buyerQueue[index].buyerAddress != address(0)) { // Check for non-zero address
-                _mint(buyerQueue[index].buyerAddress, buyerQueue[index].quantity);
-                buyerQueue.pop();
-            }
-        }
+  function decimals() override public pure returns (uint8) {
+        return 0;
     }
-    
-    // Transfer tokens to another user
-    function transferTokens(address _recipient, uint _quantity) public {
-        require(_quantity <= balanceOf(msg.sender), "Insufficient balance");
-        _transfer(msg.sender, _recipient, _quantity);
+function mint(address to, uint256 amount) public onlyOwner {
+        _mint(to, amount);
     }
 
-    // Redeem different collectibles
-    function redeemCollectibles(Collectibles _collectible) public {
-        if (_collectible == Collectibles.Common) {
-            require(balanceOf(msg.sender) >= 15, "Insufficient balance");
-            userCollectibles[msg.sender].common += 1;
-            burn(15);
-        } else if (_collectible == Collectibles.Uncommon) {
-            require(balanceOf(msg.sender) >= 25, "Insufficient balance");
-            userCollectibles[msg.sender].uncommon += 1;
-            burn(25);
-        } else if (_collectible == Collectibles.Rare) {
-            require(balanceOf(msg.sender) >= 35, "Insufficient balance");
-            userCollectibles[msg.sender].rare += 1;
-            burn(35);
-        } else if (_collectible == Collectibles.UltraRare) {
-            require(balanceOf(msg.sender) >= 45, "Insufficient balance");
-            userCollectibles[msg.sender].ultraRare += 1;
-            burn(45);
-        } else if (_collectible == Collectibles.Legendary) {
-            require(balanceOf(msg.sender) >= 60, "Insufficient balance");
-            userCollectibles[msg.sender].legend += 1;
-            burn(60);
-        } else {
-            revert("Invalid collectible selected");
-        }
+function transferToken(address _recipient, uint _amount) external {
+        require(balanceOf(msg.sender) >= _amount, "Insufficient balance");
+        transfer(_recipient, _amount);
     }
 
-    // Function to burn tokens
-    function burnTokens(address _holder, uint _quantity) public {
-        _burn(_holder, _quantity);
+  function purchaseItem(uint8 _itemId) external {
+        require(items[_itemId].price != 0, "Item not found");
+        require(balanceOf(msg.sender) >= items[_itemId].price, "Insufficient balance");
+
+ burn(items[_itemId].price);
+ playerItems[msg.sender].push(items[_itemId]);
+ emit ItemPurchased(msg.sender, _itemId, items[_itemId].name, items[_itemId].price);
     }
 
-    // Function to check the balance of tokens
-    function getBalance() public view returns (uint) {
+ function getBalance() external view returns (uint256) {
         return balanceOf(msg.sender);
+    }
+
+ function burnToken(uint _amount) external {
+        require(balanceOf(msg.sender) >= _amount, "Insufficient amount");
+        burn(_amount);
+    }
+
+ function addItem(string memory _name, uint256 _price) public onlyOwner {
+        items[tokenId] = Item(_name, tokenId, _price);
+        tokenId++;
+    }
+
+function isLessThanFive(bool _prediction, uint256 _betAmount) public {
+        uint randomNumber = uint(keccak256(abi.encodePacked(block.timestamp, msg.sender))) % 10;
+
+ if (_prediction == (randomNumber < 5)) {
+            _mint(msg.sender, _betAmount * 2);
+            emit GameOutcome(msg.sender, randomNumber, true, "won");
+        } else {
+  burn(_betAmount);
+            emit GameOutcome(msg.sender, randomNumber, false, "lost");
+        }
+    }
+function welcomeBonus() public {
+        require(balanceOf(msg.sender) == 0, "You've already claimed your welcome bonus");
+        _mint(msg.sender, 50);
     }
 }
